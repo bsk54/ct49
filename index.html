@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!--**********************************************************************************************************-->
+  <!--************************************************ CT49 ****************************************************-->
+  <!--******************************************** Version 1.00 ************************************************-->
+  <!--******************************************** July 1, 2025 ************************************************-->
+  <!--**********************************************************************************************************-->
+  <!-------------------------------------------------------------------------------------------------------------->
+  <!------------------------------------ Code by: Bernd Sebastian Kamps ------------------------ ----------------->
+  <!-------------------------------------------------------------------------------------------------------------->
+  <!-- Description: CT49 is a one-page web application designed to help you study the tones of the Mandarin     -->
+  <!-- Chinese language. It starts with four blocks, each containing three single-character words demonstrating -->
+  <!-- tones 1, 2, 3 and 4. You can then drill down through any combination of tones up to three levels deep —  -->
+  <!-- for example, 3-4-3 for '我爱你' ('I love you'), or 4-4-5 for '太好了' ('Great!'). CT49 displays both        -->
+  <!-- simplified and traditional characters — tap on any Chinese character to hear its pronunciation.          -->
+  <!--                                                                                                          -->
+  <!-- Translations are available in twelve languages: Arabic, English, French, German, Indonesian, Italian,    -->
+  <!-- Japanese, Korean, Portuguese, Russian, Spanish and Thai.                                                 -->
+  <!--                                                                                                          -->
+  <!-- Navigation rules:                                                                                        -->
+  <!--  1) Clicking on a translated word will advance to the next level.                                        -->
+  <!--  2) Clicking on the level number in the first column, or pressing Esc or the left arrow on the keyboard, -->
+  <!--     will take you back to the previous level.                                                            -->
+  <!--  3) Clicking a pinyin entry opens a detailed list of the current block.                                  -->
+  <!--**********************************************************************************************************-->
+  <!-- Repository: https://github.com/bsk54/CT49.git ------------------------------------------------------------->
+  <!-- Web site:   https://aiopop.com/CT49 ----------------------------------------------------------------------->
+  <!--**********************************************************************************************************-->
+
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CT49</title>
+
+  <!-- Matomo -->
+  <script>
+    var _paq = window._paq = window._paq || [];
+    _paq.push(['trackPageView']);
+    _paq.push(['enableLinkTracking']);
+    (function() {
+      var u="https://aiopop.com/matnogo/";
+      _paq.push(['setTrackerUrl', u+'matomo.php']);
+      _paq.push(['setSiteId','23']);
+      var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+      g.async=true; g.src=u+'matomo.js'; s.parentNode.insertBefore(g,s);
+    })();
+  </script>
+  <!-- End Matomo Code -->
+
+  <!-- Favicons -->
+  <link rel="shortcut icon" href="favicon.ico" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="icon" type="image/png" href="favicon.png" />
+
+  <!-- PapaParse -->
+  <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <style>
+    :root {
+      --header-height: 60px;
+      --logo-size: 1.5rem;
+      --logo-weight: 250;
+      --logo-letter-spacing: 0.05em;
+      --logo-color: #333;
+      --max-width: 600px;
+      --base-font-size: 16px;
+      /* block colors */
+      --block-color-1: #F44336;
+      --block-color-2: #FFC107;
+      --block-color-3: #2196F3;
+      --block-color-4: #4CAF50;
+      --block-color-5: #9C27B0;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; width: 100%; font-family: sans-serif; }
+
+    /* Font sizes */
+    .num            { font-size: calc(var(--base-font-size) - 2px); }
+    .pinyin, .trans { font-size: var(--base-font-size); }
+    .chinese, .trad { font-size: calc(var(--base-font-size) + 4px); }
+
+    /* Translation colors */
+    .trans           { color: #888; }
+    .trans.clickable { color: #000; }
+
+    .app {
+      display: flex; flex-direction: column;
+      height: 100vh; max-width: var(--max-width);
+      margin: 0 auto; width: 100%;
+    }
+    .app.show-trad .trad { display: table-cell; }
+    .trad { display: none; }
+
+    .header {
+      position: relative; flex: 0 0 var(--header-height);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 16px; background: #fff; border-bottom: 1px solid #ddd;
+    }
+    .header__logo {
+      font-family: 'Montserrat', sans-serif;
+      font-size: var(--logo-size);
+      font-weight: var(--logo-weight);
+      letter-spacing: var(--logo-letter-spacing);
+      color: var(--logo-color);
+      cursor: pointer;
+    }
+    .header__legend {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 0.65rem;
+      color: #666;
+      text-align: center;
+      pointer-events: none;
+      white-space: pre-line;
+      line-height: 1.2;
+      width: 45%;
+    }
+    @media (min-width: 768px) {
+      .header__legend {
+        font-size: 0.9rem;
+        width: 60%;
+      }
+    }
+
+    .breadcrumb {
+      position: absolute; top: 100%; left: 0; right: 0;
+      display: flex; justify-content: center;
+      padding: 4px 0; font-size: 0.9rem;
+      background: #fafafa; border-bottom: 1px solid #ddd;
+      user-select: none;
+    }
+    .breadcrumb span { color: #0066cc; cursor: pointer; }
+    .breadcrumb .sep { margin: 0 4px; color: #555; }
+
+    .controls-right { display: flex; align-items: center; gap: 8px; }
+
+    .lang-selector { position: relative; }
+    .lang-selector__button {
+      background: #FFEB3B; border: 1px solid #ccc; border-radius: 4px;
+      padding: 8px 12px; cursor: pointer; font-size: 0.9rem; color: #444;
+    }
+    .lang-selector__menu {
+      display: none; position: absolute; top: 100%; right: 0;
+      background: #fff; border: 1px solid #ccc; border-radius: 4px;
+      list-style: none; padding: 8px 0; width: 180px; max-height: 80vh;
+      overflow-y: auto; font-size: 0.9rem; color: #888; z-index: 1000;
+    }
+    .lang-selector.open .lang-selector__menu { display: block; }
+    .lang-selector__item {
+      padding: 8px 12px; cursor: pointer;
+    }
+    .lang-selector__item.selected {
+      background: rgba(0,0,0,0.05); font-weight: bold;
+    }
+
+    .menu-container { position: relative; }
+    .hamburger-btn {
+      background: none; border: none; font-size: 1.3rem; cursor: pointer;
+    }
+    .menu {
+      display: none; position: absolute; top: 100%; right: 0;
+      background: #fff; border: 1px solid #ccc;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      width: 200px; padding: 8px 0; font-size: 1rem; z-index: 1000;
+      max-height: calc(100vh - var(--header-height) - 16px);
+      overflow-y: auto;
+    }
+    .menu.open { display: block; }
+    .menu ul { list-style: none; margin: 0; padding: 0; }
+    .menu li {
+      padding: 8px 16px; cursor: pointer;
+    }
+    .menu li:hover { background: #f5f5f5; }
+
+    .slider-panel {
+      position: absolute; top: var(--header-height); right: 30px;
+      width: 300px; background: #fff; border: 1px solid #ccc;
+      border-radius: 4px; padding: 28px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      z-index: 1001; display: none;
+    }
+    .slider-panel.visible { display: block; }
+    .slider-panel .label {
+      display: block; margin-bottom: 14px; font-size: 1rem; text-align: center;
+    }
+    .slider-panel input[type="range"] { width: 100%; }
+
+    .content {
+      flex: 1 1 auto; padding: 16px; overflow-y: auto;
+    }
+
+    table.outer { width: 100%; border-collapse: collapse; }
+    table.outer td { padding: 16px 0; vertical-align: top; }
+
+    table.inner {
+      width: 100%; border-collapse: collapse; table-layout: fixed;
+      background: #fafafa; border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    table.inner tr:hover { background: #fff; }
+    table.inner td {
+      padding: 10px 12px; border-bottom: 1px solid #e8e8e8;
+    }
+    table.inner tr:last-child td { border-bottom: none; }
+
+    /* first-column numbers: white text and top padding */
+    .inner td.num {
+      width: 6ch;
+      text-align: center;
+      padding: 10px 4px;
+      color: white;
+    }
+
+    /* color blocks (for main grid only) */
+    .num[data-block^="1"] { background: var(--block-color-1); }
+    .num[data-block^="2"] { background: var(--block-color-2); }
+    .num[data-block^="3"] { background: var(--block-color-3); }
+    .num[data-block^="4"] { background: var(--block-color-4); }
+    .num[data-block^="5"] { background: var(--block-color-5); }
+
+    .footer {
+      flex: 0 0 auto; text-align: center; padding: 12px 0;
+      background: #fff; border-top: 1px solid #ccc;
+      font-size: 0.9em;
+    }
+    .footer p { margin: 8px 0; }
+    .footer a { color: #0066cc; text-decoration: none; }
+
+    .modal.hidden { display: none; }
+    .modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000;
+    }
+
+    /* About modal styling */
+    .modal-content {
+      position: relative;
+      background: #fff;
+      border-radius: 8px;
+      padding: 20px;
+      max-width: 400px;
+      width: 90%;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    /* reuse block-modal close button style */
+    .close-block-btn {
+      position: absolute; top: 12px; right: 12px;
+      width: 44px; height: 44px; border: none; border-radius: 50%;
+      background: #FF8C00; color: #fff; font-size: 1.5rem;
+      cursor: pointer; display: flex; align-items: center;
+      justify-content: center;
+    }
+
+    /* Block modal: revert to previous 90%/500px size */
+    .modal-content.block {
+      width: 90%; max-width: 500px; height: 80vh;
+      padding: 16px; overflow-y: auto;
+      position: relative; font-size: var(--base-font-size);
+    }
+    .block-header {
+      text-align: center;
+      font-size: calc(var(--base-font-size) + 2px);
+      font-weight: normal; margin-bottom: 12px;
+    }
+    .block-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    .block-table td {
+      padding: 8px; border-bottom: 1px solid #ddd; text-align: left;
+    }
+	/* make the About modal scrollable if content overflows */
+#infoModal .modal-content {
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+/* space out all paragraphs in the About dialog */
+#infoModal .modal-content p {
+  margin: 1em 0;
+}
+
+/* add a bit of breathing-room above the last paragraph (the “navigation rules”) */
+#infoModal .modal-content p:last-of-type {
+  margin-top: 1em;
+}
+
+/* treat each <br> in that last paragraph as a block with extra gap */
+#infoModal .modal-content p:last-of-type br {
+  display: block;
+  margin: 0.5em 0;
+}
+
+/* restore and space out ordered lists as a whole */
+#infoModal .modal-content ol {
+  margin: 1em 0;
+  padding-inline-start: 1.5em;
+}
+
+/* add breathing room between each list item */
+#infoModal .modal-content ol li {
+  margin-block: 0.5em;
+}
+
+
+
+
+
+	
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1 class="header__logo" id="homeLink">CT49</h1>
+      <div class="header__legend">
+        Click Chinese for audio, translations to drill down, numbers to go back, pinyin for details.
+      </div>
+      <div class="controls-right">
+        <div class="lang-selector" id="langSelector">
+          <button id="langToggleBtn" class="lang-selector__button">EN</button>
+          <ul id="langMenu" class="lang-selector__menu">
+            <li class="lang-selector__item" data-value="ar">Arabic</li>
+            <li class="lang-selector__item" data-value="en">English</li>
+            <li class="lang-selector__item" data-value="fr">French</li>
+            <li class="lang-selector__item" data-value="de">German</li>
+            <li class="lang-selector__item" data-value="id">Indonesian</li>
+            <li class="lang-selector__item" data-value="it">Italian</li>
+            <li class="lang-selector__item" data-value="ja">Japanese</li>
+            <li class="lang-selector__item" data-value="ko">Korean</li>
+            <li class="lang-selector__item" data-value="pt">Portuguese</li>
+            <li class="lang-selector__item" data-value="ru">Russian</li>
+            <li class="lang-selector__item" data-value="es">Spanish</li>
+            <li class="lang-selector__item" data-value="th">Thai</li>
+          </ul>
+        </div>
+        <div class="menu-container">
+          <button id="hamburgerBtn" class="hamburger-btn">☰</button>
+          <nav id="hamburgerMenu" class="menu">
+            <ul>
+              <li id="toggleTraditional">Show Traditional</li>
+              <li id="fontSizeBtn">Font Size</li>
+              <li id="aboutBtn">About</li>
+            </ul>
+          </nav>
+        </div>
+      </div>
+    </header>
+
+    <div id="breadcrumb" class="breadcrumb"></div>
+
+    <main class="content">
+      <table class="outer" id="grid"><tbody></tbody></table>
+    </main>
+
+    <footer class="footer">
+      <p>CT49 is a free World Service.</p>
+      <p><a href="privacy.html" target="_blank">Privacy Policy</a></p>
+      <p>© 2025 <a href="https://bsk1.com" target="_blank">BSK</a></p>
+    </footer>
+  </div>
+
+  <!-- About modal -->
+  <div id="infoModal" class="modal hidden">
+    <div class="modal-content">
+      <button id="infoCloseBtn" class="close-block-btn">×</button>
+      <div id="infoBody"></div>
+    </div>
+  </div>
+
+  <!-- Font-size panel -->
+  <div id="fontSizePanel" class="slider-panel">
+    <label class="label">Font size: <span id="fontValue">16</span>px</label>
+    <input type="range" id="fontSlider" min="12" max="36" step="1" />
+  </div>
+
+  <!-- Block modal -->
+  <div id="blockModal" class="modal hidden">
+    <div class="modal-content block">
+      <div id="blockHeader" class="block-header"></div>
+      <button id="blockCloseBtn" class="close-block-btn">×</button>
+      <div id="blockBody"></div>
+    </div>
+  </div>
+
+  <script>
+    const LANG_KEY='ct49_language', TRAD_KEY='ct49_traditional', FONT_KEY='ct49_fontSize';
+    const LANG_MAP={ar:'Arabic',en:'English',fr:'French',de:'German',
+                   id:'Indonesian',it:'Italian',ja:'Japanese',ko:'Korean',
+                   pt:'Portuguese',ru:'Russian',es:'Spanish',th:'Thai'};
+    let csvRaw=[], groupMap={}, currentGroup=null;
+
+    function normalize(rows){
+      let last=null;
+      return rows.map(r=>{
+        if(r.FirstColumn) last=r.FirstColumn;
+        else r.FirstColumn=last;
+        return r;
+      });
+    }
+    function buildGroupMap(rows){
+      const map={};
+      Array.from(new Set(rows.map(r=>r.FirstColumn))).forEach(key=>{
+        const idx=key.lastIndexOf('-'),
+              parent= idx===-1 ? '' : key.slice(0,idx);
+        (map[parent]=map[parent]||[]).push(key);
+      });
+      Object.keys(map).forEach(p=>{
+        map[p].sort((a,b)=>{
+          const pa=a.split('-').map(x=>isNaN(x)?x:+x),
+                pb=b.split('-').map(x=>isNaN(x)?x:+x);
+          for(let i=0;i<pa.length&&i<pb.length;i++){
+            if(pa[i]<pb[i]) return -1;
+            if(pa[i]>pb[i]) return 1;
+          }
+          return 0;
+        });
+      });
+      return map;
+    }
+    function loadCSV(){
+      Papa.parse('ct49.csv',{delimiter:';',header:true,download:true,skipEmptyLines:true,
+        complete(res){
+          csvRaw=normalize(res.data);
+          groupMap=buildGroupMap(csvRaw);
+          renderGrid();
+        }
+      });
+    }
+    function renderBreadcrumb(){
+      const bc=document.getElementById('breadcrumb');
+      bc.innerHTML='';
+      const parts=currentGroup?currentGroup.split('-'):[],
+            crumbs=[{label:'Home',group:''}];
+      let acc='';
+      parts.forEach(p=>{
+        acc = acc ? acc+'-'+p : p;
+        crumbs.push({label:acc,group:acc});
+      });
+      crumbs.forEach((c,i)=>{
+        const span=document.createElement('span');
+        span.textContent=c.label;
+        span.dataset.group=c.group;
+        span.onclick=()=>{ currentGroup=c.group||null; renderGrid(); };
+        bc.append(span);
+        if(i<crumbs.length-1){
+          const sep=document.createElement('span');
+          sep.textContent='›'; sep.className='sep';
+          bc.append(sep);
+        }
+      });
+    }
+    function renderGrid(){
+      const tbody=document.querySelector('#grid tbody');
+      tbody.innerHTML='';
+      const parent=currentGroup||'', depth=parent?parent.split('-').length:0;
+      (groupMap[parent]||[]).forEach(groupId=>{
+        const rows=csvRaw.filter(r=>r.FirstColumn===groupId)
+                         .slice(0, depth===0?3:5);
+        const clickable=!!groupMap[groupId]?.length;
+        const tr=document.createElement('tr'),
+              td=document.createElement('td');
+        td.append(renderInnerTable(rows,groupId,clickable));
+        tr.append(td);
+        tbody.append(tr);
+      });
+      renderBreadcrumb();
+    }
+    function renderInnerTable(rows,groupId,clickable){
+      const tbl=document.createElement('table');
+      tbl.className='inner';
+      const lang=localStorage.getItem(LANG_KEY)||'en',
+            col=LANG_MAP[lang]||'English';
+      rows.forEach((r,i)=>{
+        const tr=document.createElement('tr');
+        const tdNum=document.createElement('td');
+        tdNum.className='num';
+        tdNum.dataset.block=groupId.split('-').pop();
+        tdNum.textContent=i===0?groupId:'';
+        tdNum.style.cursor='pointer';
+        tdNum.onclick=goBack;
+        tr.append(tdNum);
+        const tdChi=document.createElement('td');
+        tdChi.className='chinese';
+        tdChi.textContent=r.Chinese;
+        tdChi.style.cursor='pointer';
+        tdChi.onclick=()=>speak(r.Chinese);
+        tr.append(tdChi);
+        const tdTrad=document.createElement('td');
+        tdTrad.className='trad';
+        tdTrad.textContent=r.Traditional;
+        tdTrad.style.cursor='pointer';
+        tdTrad.onclick=()=>speak(r.Traditional);
+        tr.append(tdTrad);
+        const tdPin=document.createElement('td');
+        tdPin.className='pinyin';
+        tdPin.textContent=r.Pinyin;
+        tdPin.style.cursor='pointer';
+        tdPin.onclick=()=>openBlockModal(groupId);
+        tr.append(tdPin);
+        const tdTrans=document.createElement('td');
+        tdTrans.className='trans'+(clickable?' clickable':'');
+        tdTrans.textContent=r[col]||r.English;
+        if(clickable){
+          tdTrans.style.cursor='pointer';
+          tdTrans.onclick=()=>{ currentGroup=groupId; renderGrid(); };
+        }
+        tr.append(tdTrans);
+        tbl.append(tr);
+      });
+      return tbl;
+    }
+    function speak(text){
+      const u=new SpeechSynthesisUtterance(text);
+      u.lang='zh-CN';
+      speechSynthesis.speak(u);
+    }
+    function goBack(){
+      if(!currentGroup) return;
+      const parts=currentGroup.split('-');
+      currentGroup=parts.length>1?parts.slice(0,-1).join('-'):null;
+      renderGrid();
+    }
+    function openBlockModal(groupId){
+      currentGroup=groupId;
+      document.getElementById('blockHeader').textContent=groupId;
+      const overlay=document.getElementById('blockModal'),
+            body=document.getElementById('blockBody');
+      body.innerHTML='';
+      const lang=localStorage.getItem(LANG_KEY)||'en',
+            col=LANG_MAP[lang]||'English';
+      const tbl=document.createElement('table'),
+            tb=tbl.createTBody();
+      tbl.className='block-table';
+      csvRaw.filter(r=>r.FirstColumn===groupId).forEach((r,idx)=>{
+        const tr=tb.insertRow();
+        [{txt:idx+1,cls:'num'},{txt:r.Chinese,cls:'chinese'},{txt:r.Traditional,cls:'trad'},
+         {txt:r.Pinyin,cls:'pinyin'},{txt:r[col]||r.English,cls:'trans'}]
+        .forEach(c=>{
+          const td=tr.insertCell(); td.textContent=c.txt; td.className=c.cls;
+          if(c.cls==='trans'&&groupMap[groupId]?.length){
+            td.classList.add('clickable'); td.style.cursor='pointer';
+          }
+          if(c.cls==='chinese'||c.cls==='trad'){
+            td.style.cursor='pointer'; td.onclick=()=>speak(c.txt);
+          }
+        });
+      });
+      body.append(tbl);
+      overlay.classList.remove('hidden');
+      overlay.addEventListener('click',e=>{
+        if(e.target===overlay) closeBlockModal();
+      });
+      tbl.querySelectorAll('td.num').forEach(td=>{
+        td.addEventListener('click',closeBlockModal);
+        td.addEventListener('touchstart',e=>{ e.preventDefault(); closeBlockModal(); });
+      });
+    }
+    function closeBlockModal(){
+      document.getElementById('blockModal').classList.add('hidden');
+    }
+
+    // Home link reset
+    document.getElementById('homeLink').onclick = () => {
+      currentGroup = null;
+      renderGrid();
+    };
+
+    // Close button in block modal
+    const closeBtn = document.getElementById('blockCloseBtn');
+    closeBtn.addEventListener('click', closeBlockModal);
+    closeBtn.addEventListener('touchstart', e=>{ e.preventDefault(); closeBlockModal(); });
+
+    // Swipe-back
+    let tx=0, ty=0;
+    document.addEventListener('touchstart',e=>{ tx=e.changedTouches[0].screenX; ty=e.changedTouches[0].screenY; });
+    document.addEventListener('touchend',e=>{
+      const dx=e.changedTouches[0].screenX-tx, dy=e.changedTouches[0].screenY-ty;
+      if(dx>50&&Math.abs(dy)<50) goBack();
+    });
+
+    // Keyboard & ESC
+    document.addEventListener('keydown',e=>{
+      if(e.key==='Escape'){
+        const info=document.getElementById('infoModal'),
+              block=document.getElementById('blockModal'),
+              panel=document.getElementById('fontSizePanel'),
+              menu=document.getElementById('hamburgerMenu'),
+              langsel=document.getElementById('langSelector');
+        if(!block.classList.contains('hidden')) closeBlockModal();
+        else if(!info.classList.contains('hidden')) info.classList.add('hidden');
+        else if(panel.classList.contains('visible')) panel.classList.remove('visible');
+        else if(menu.classList.contains('open')) menu.classList.remove('open');
+        else if(langsel.classList.contains('open')) langsel.classList.remove('open');
+        else goBack();
+      }
+      if(e.key==='ArrowLeft'||e.key==='Backspace') goBack();
+    });
+
+    function initLanguagePicker(){
+      const sel=document.getElementById('langSelector'),
+            btn=document.getElementById('langToggleBtn');
+      if(!localStorage.getItem(LANG_KEY)) localStorage.setItem(LANG_KEY,'en');
+      function refresh(){
+        const v=localStorage.getItem(LANG_KEY);
+        btn.textContent=v.toUpperCase();
+        document.querySelectorAll('.lang-selector__item')
+          .forEach(it=>it.classList.toggle('selected',it.dataset.value===v));
+      }
+      refresh();
+      document.querySelectorAll('.lang-selector__item').forEach(it=>{
+        it.onclick=e=>{ e.stopPropagation(); localStorage.setItem(LANG_KEY,it.dataset.value); refresh(); renderGrid(); sel.classList.remove('open'); };
+      });
+      btn.onclick=e=>{ e.stopPropagation(); sel.classList.toggle('open'); };
+    }
+
+    function initMenu(){
+      const menu=document.getElementById('hamburgerMenu');
+      document.getElementById('hamburgerBtn').onclick=e=>{ e.stopPropagation(); menu.classList.toggle('open'); };
+      document.addEventListener('click',()=>menu.classList.remove('open'));
+
+      // Toggle Traditional
+      const tog=document.getElementById('toggleTraditional');
+      function applyTrad(){
+        const on=localStorage.getItem(TRAD_KEY)==='1';
+        document.querySelector('.app').classList.toggle('show-trad',on);
+        tog.textContent=on?'Hide Traditional':'Show Traditional';
+      }
+      tog.onclick=()=>{ localStorage.setItem(TRAD_KEY,localStorage.getItem(TRAD_KEY)==='1'?'0':'1'); applyTrad(); menu.classList.remove('open'); };
+      applyTrad();
+
+      // Font size
+      const fsBtn=document.getElementById('fontSizeBtn'),
+            panel=document.getElementById('fontSizePanel'),
+            slider=document.getElementById('fontSlider'),
+            val=document.getElementById('fontValue');
+      function applyFont(v){
+        document.documentElement.style.setProperty('--base-font-size',v+'px');
+        val.textContent=v; localStorage.setItem(FONT_KEY,v);
+      }
+      slider.value=localStorage.getItem(FONT_KEY)||'16'; applyFont(slider.value);
+      fsBtn.onclick=()=>{ panel.classList.add('visible'); menu.classList.remove('open'); };
+      slider.oninput=e=>applyFont(e.target.value);
+      slider.onchange=()=>panel.classList.remove('visible');
+      document.addEventListener('mousedown',e=>{ if(!panel.contains(e.target)&&e.target!==fsBtn) panel.classList.remove('visible'); });
+
+      // About button
+      const aboutBtn = document.getElementById('aboutBtn');
+      aboutBtn.onclick = () => {
+        const infoBody = document.getElementById('infoBody');
+        infoBody.innerHTML = `
+          <h3>About CT49</h3>
+          <p>
+            CT49 is a one-page web application designed to help you study the tones of Mandarin Chinese.
+      It begins with four blocks, each containing three single-character words demonstrating tones 1, 2, 3 and 4.
+            You can then drill down through any combination of tones up to three levels deep — for example,
+            3-4-3 for ‘我爱你’ (‘I love you’), or 4-4-5 for ‘太好了’ (‘Great!’).
+            CT49 displays both simplified and traditional characters — tap on any Chinese character to hear its pronunciation.
+          </p>
+          <p>
+            Translations are available in twelve languages.
+          </p>
+          <p>
+            <strong>Navigation rules:</strong><br>
+            1) Clicking on a translated word will take you to the next level.<br>
+            2) Click on the level number in the first column or press Esc or the left arrow on the keyboard to go back to the previous level.<br>
+            3) Clicking on a pinyin entry opens a detailed list of the current block.
+          </p>
+        `;
+        document.getElementById('infoModal').classList.remove('hidden');
+        menu.classList.remove('open');
+      };
+    }
+
+    function initModal(){
+      const m=document.getElementById('infoModal'),
+            btn=document.getElementById('infoCloseBtn');
+      function closeInfo(){ m.classList.add('hidden'); }
+      btn.addEventListener('click', closeInfo);
+      btn.addEventListener('touchstart', e=>{ e.preventDefault(); closeInfo(); });
+      m.addEventListener('click', e=>{ if(e.target===m) closeInfo(); });
+      m.querySelector('.modal-content').addEventListener('click', e=>e.stopPropagation());
+    }
+
+    document.addEventListener('DOMContentLoaded',()=>{
+      initLanguagePicker();
+      initMenu();
+      initModal();
+      loadCSV();
+    });
+  </script>
+</body>
+</html>
